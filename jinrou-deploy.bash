@@ -6,6 +6,10 @@ copy_name_list=("config" "rss" "user_icon")
 ignore_pattern_list=("^\.git\$")
 writable_list=("rss" "user_icon")
 
+# 捕捉
+# コピー: すでにコピーされていたらコピーしない
+# リンク: 実体を毎回差し替える
+
 jinrou_path=""
 deploy_path=""
 
@@ -49,11 +53,35 @@ link_all(){
 			echo "ignored: $name"
 			continue
 		fi
+		echo "link: $name"
+		rm -Rf "$2/$name"
+		cp -R "$1/$name"
 		if [[ ! -e "$2/$name" ]] ; then
 			local abs_path="$(get_abs_path "$1/$name")"
 			echo "link: $name"
 			ln -s "$abs_path" "$2/$name"
 		fi
+	done
+	return 0
+}
+
+copy_link_all(){
+	local IFS=$'\n'
+	for name in $(ls -1A "$1") ; do
+		local skip=0
+		for pattern in "${ignore_pattern_list[@]}" ; do
+			if [[ -n "$(echo "$name" | grep "$pattern")" ]] ; then
+				skip=1
+				break
+			fi
+		done
+		if [[ "$skip" != 0 ]] ; then
+			echo "ignored: $name"
+			continue
+		fi
+		echo "link: $name"
+		rm -Rf "$2/$name"
+		cp -R "$1/$name" "$2/$name"
 	done
 	return 0
 }
@@ -65,6 +93,19 @@ remove_dead_links(){
 		if [[ -L "$1/$name" && ! -e "$1/$name" ]] ; then
 			echo "remove dead link: $name"
 			rm "$1/$name"
+		fi
+	done
+	return 0
+}
+
+# $1: src
+# $2: dest
+remove_dead_copy_links(){
+	local IFS=$'\n'
+	for name in $(ls -1A "$2") ; do
+		if [[ -e "$2/$name" && ! -e "$1/$name" ]] ; then
+			echo "remove dead copy link: $name"
+			rm -Rf "$2/$name"
 		fi
 	done
 	return 0
@@ -98,8 +139,8 @@ main(){
 	fi
 
 	copy_copy_targets "$jinrou_path" "$deploy_path"
-	link_all "$jinrou_path" "$deploy_path"
-	remove_dead_links "$deploy_path"
+	copy_link_all "$jinrou_path" "$deploy_path"
+	remove_dead_copy_links "$jinrou_path" "$deploy_path"
 	set_writable_perms "$deploy_path"
 
 	return 0
